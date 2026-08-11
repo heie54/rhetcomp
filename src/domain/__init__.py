@@ -1,0 +1,1 @@
+"""Frozen domain contracts."""

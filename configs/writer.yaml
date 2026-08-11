@@ -1,0 +1,10 @@
+{
+  "config_version": "baseline-v0.1-writer-contract-1",
+  "status": "not_implemented_before_stage_4",
+  "model": null,
+  "temperature": null,
+  "top_p": null,
+  "max_output_tokens": null,
+  "seed": null,
+  "citation_format": null
+}

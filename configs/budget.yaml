@@ -1,0 +1,9 @@
+{
+  "config_version": "baseline-v0.1-budget-1",
+  "tokenizer": {
+    "name": "deterministic_regex",
+    "version": "1"
+  },
+  "target_evidence_tokens": 8000,
+  "writing_condition_tokens": 4000
+}

@@ -1,0 +1,22 @@
+{
+  "config_version": "baseline-v0.1-dataset-pilot-1",
+  "source_field": "ACL/NLP",
+  "target_field": "Physics",
+  "source_corpus": "ACL 2024 main-conference Introduction exemplars",
+  "target_set": "NC_Physics official test set",
+  "pilot": {
+    "expected_source_count": 20,
+    "expected_target_count": 10,
+    "fixture_kind": "synthetic_contract_fixture"
+  },
+  "paths": {
+    "source_input": "data/pilot/input/source/pilot_sources.jsonl",
+    "target_input": "data/pilot/input/target/pilot_targets.jsonl",
+    "source_normalized": "data/source/normalized",
+    "target_visible": "data/target/visible",
+    "target_evidence": "data/target/evidence",
+    "target_gold": "data/target/gold",
+    "evidence_packs": "artifacts/evidence_packs",
+    "audits": "artifacts/audits"
+  }
+}

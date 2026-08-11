@@ -1,0 +1,9 @@
+[project]
+name = "baseline-v01"
+version = "0.1.0"
+description = "Frozen pilot scaffold and ingestion pipeline for Baseline v0.1"
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.unittest]
+start-directory = "tests"

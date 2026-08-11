@@ -1,0 +1,67 @@
+# Python bytecode and interpreter caches
+__pycache__/
+*.py[cod]
+*.pyd
+
+# Test caches, coverage, and generated test reports
+.pytest_cache/
+.hypothesis/
+.tox/
+.nox/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+test-results/
+junit*.xml
+tests/.tmp/
+tests/tmp/
+
+# Ad-hoc root-level test/debug scripts (formal tests belong under tests/)
+/test_*.py
+/test-*.py
+/debug_*.py
+/scratch_*.py
+/tmp_*.py
+/test_*.ps1
+/debug_*.ps1
+/tmp_*.ps1
+
+# Virtual environments and local environment files
+.venv/
+venv/
+env/
+.conda/
+.env
+.env.*
+!.env.example
+
+# AI coding-agent runtime and scratch state
+/.codex/
+/.agents/
+/.claude/
+/.cursor/
+/.continue/
+/.aider*
+/.superpowers/
+/planning-files/
+/.playwright/
+/.playwright-cli/
+
+# Logs and disposable temporary files
+*.log
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+*~
+/tmp/
+/temp/
+
+# IDE and operating-system metadata
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+Desktop.ini
