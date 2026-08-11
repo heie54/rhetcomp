@@ -1,0 +1,21 @@
+{
+  "target_id": "ncphysics_oversized_fixture",
+  "title": "Required title retained under structured truncation",
+  "abstract": "Required abstract retained under structured truncation.",
+  "non_intro_sections": {
+    "Methods": {
+      "text": "oversized_evidence_token",
+      "repeat": 9000
+    },
+    "Results": {
+      "text": "secondary_result_token",
+      "repeat": 1000
+    }
+  },
+  "reference_metadata": [
+    {
+      "title": "Reference retained only when the remaining field budget permits",
+      "year": 2024
+    }
+  ]
+}

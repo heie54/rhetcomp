@@ -14,6 +14,14 @@ from src.evidence_pack.builder import build_target_evidence_pack
 from src.ingest.source import normalize_source_record
 from src.ingest.target import normalize_target_record
 from src.logging_config import configure_logging
+from src.runtime import (
+    CompilerDataAccess,
+    EvaluatorDataAccess,
+    WriterDataAccess,
+    load_compiler_runtime_config,
+    load_evaluator_runtime_config,
+    load_writer_runtime_config,
+)
 
 
 LOGGER = logging.getLogger(__name__)
@@ -43,6 +51,11 @@ def prepare_pilot(
     dataset = load_config(dataset_path)
     budget = load_config(budget_path)
     paths = dataset["paths"]
+    runtime_accesses = (
+        CompilerDataAccess(load_compiler_runtime_config(dataset_path, root)),
+        WriterDataAccess(load_writer_runtime_config(dataset_path, root)),
+        EvaluatorDataAccess(load_evaluator_runtime_config(dataset_path, root)),
+    )
 
     source_input = _resolve(root, paths["source_input"])
     target_input = _resolve(root, paths["target_input"])
@@ -100,6 +113,7 @@ def prepare_pilot(
         expected_source_count=int(pilot["expected_source_count"]),
         expected_target_count=int(pilot["expected_target_count"]),
         roots=(visible_output, evidence_output, gold_output),
+        runtime_accesses=runtime_accesses,
     )
     report["fixture_kind"] = pilot.get("fixture_kind")
     report["dataset_config_version"] = dataset["config_version"]

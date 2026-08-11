@@ -6,9 +6,19 @@ from typing import Any, Iterable
 
 from src.common.jsonio import canonical_json, sha256_json
 from src.domain.models import SourcePaper, TargetEvidencePack
+from src.runtime.data_access import (
+    CompilerDataAccess,
+    EvaluatorDataAccess,
+    WriterDataAccess,
+)
 
 
 CONDITIONS = ("evidence_only", "raw", "summary", "guideline", "experience")
+
+
+def _is_gold_capability_name(name: str) -> bool:
+    normalized = name.lower()
+    return "gold" in normalized or "evaluator" in normalized
 
 
 def audit_source_addressability(sources: Iterable[SourcePaper]) -> dict[str, Any]:
@@ -46,20 +56,91 @@ def audit_gold_import_isolation(project_root: Path) -> dict[str, Any]:
             for node in ast.walk(tree):
                 if isinstance(node, ast.Import):
                     names = [alias.name for alias in node.names]
-                    if any("gold" in name.lower() for name in names):
-                        violations.append({"file": relative, "reason": "gold_import", "names": names})
+                    if any(_is_gold_capability_name(name) for name in names):
+                        violations.append(
+                            {"file": relative, "reason": "gold_capability_import", "names": names}
+                        )
                 elif isinstance(node, ast.ImportFrom):
                     names = [alias.name for alias in node.names]
                     module = node.module or ""
-                    if "gold" in module.lower() or any("gold" in name.lower() for name in names):
+                    if _is_gold_capability_name(module) or any(
+                        _is_gold_capability_name(name) for name in names
+                    ):
                         violations.append(
-                            {"file": relative, "reason": "gold_import", "module": module, "names": names}
+                            {
+                                "file": relative,
+                                "reason": "gold_capability_import",
+                                "module": module,
+                                "names": names,
+                            }
                         )
+                elif isinstance(node, ast.Name) and _is_gold_capability_name(node.id):
+                    violations.append(
+                        {"file": relative, "reason": "gold_capability_name", "name": node.id}
+                    )
+                elif isinstance(node, ast.Attribute) and _is_gold_capability_name(node.attr):
+                    violations.append(
+                        {"file": relative, "reason": "gold_capability_attribute", "name": node.attr}
+                    )
                 elif isinstance(node, ast.Constant) and isinstance(node.value, str):
                     normalized = node.value.replace("\\", "/").lower()
                     if "target_gold" in normalized or "target/gold" in normalized:
                         violations.append({"file": relative, "reason": "gold_path_literal"})
     return {"passed": not violations, "checked_files": checked_files, "violations": violations}
+
+
+def audit_runtime_gold_isolation(
+    compiler_access: CompilerDataAccess,
+    writer_access: WriterDataAccess,
+    evaluator_access: EvaluatorDataAccess,
+    expected_gold_root: Path,
+) -> dict[str, Any]:
+    violations: list[dict[str, str]] = []
+    expected = expected_gold_root.resolve()
+    restricted = (
+        ("compiler", compiler_access),
+        ("writer", writer_access),
+    )
+    role_capabilities: dict[str, list[str]] = {}
+
+    for role, access in restricted:
+        roots = {
+            name: path.resolve()
+            for name, path in access.configured_roots().items()
+        }
+        role_capabilities[role] = sorted(roots)
+        if any("gold" in name.lower() for name in roots):
+            violations.append({"role": role, "reason": "gold_capability_exposed"})
+        if expected in roots.values():
+            violations.append({"role": role, "reason": "gold_root_held"})
+        public_gold_members = [
+            name for name in dir(access) if not name.startswith("_") and "gold" in name.lower()
+        ]
+        if public_gold_members:
+            violations.append(
+                {
+                    "role": role,
+                    "reason": "gold_member_exposed",
+                    "members": ",".join(sorted(public_gold_members)),
+                }
+            )
+
+    evaluator_roots = {
+        name: path.resolve()
+        for name, path in evaluator_access.configured_roots().items()
+    }
+    role_capabilities["evaluator"] = sorted(evaluator_roots)
+    if evaluator_roots != {"target_gold": expected}:
+        violations.append({"role": "evaluator", "reason": "gold_capability_missing_or_wrong"})
+    if evaluator_access.target_gold_path("capability_probe").parent.resolve() != expected:
+        violations.append({"role": "evaluator", "reason": "gold_path_resolution_wrong"})
+
+    return {
+        "passed": not violations,
+        "role_capabilities": role_capabilities,
+        "evaluator_gold_root_matches_expected": evaluator_roots == {"target_gold": expected},
+        "violations": violations,
+    }
 
 
 def audit_target_separation(
@@ -118,6 +199,7 @@ def build_gate1_report(
     expected_source_count: int,
     expected_target_count: int,
     roots: tuple[Path, Path, Path],
+    runtime_accesses: tuple[CompilerDataAccess, WriterDataAccess, EvaluatorDataAccess],
 ) -> dict[str, Any]:
     checks = {
         "pilot_counts": {
@@ -129,6 +211,12 @@ def build_gate1_report(
         },
         "source_addressability": audit_source_addressability(sources),
         "gold_import_isolation": audit_gold_import_isolation(project_root),
+        "runtime_gold_isolation": audit_runtime_gold_isolation(
+            runtime_accesses[0],
+            runtime_accesses[1],
+            runtime_accesses[2],
+            roots[2],
+        ),
         "target_namespace_separation": audit_target_separation(
             visible_payloads,
             evidence_payloads,
@@ -140,7 +228,7 @@ def build_gate1_report(
         "evidence_pack_reuse": audit_evidence_pack_reuse(packs),
     }
     return {
-        "audit_version": "gate1-v1",
+        "audit_version": "gate1-v2",
         "gate": "Gate 1",
         "passed": all(check["passed"] for check in checks.values()),
         "checks": checks,

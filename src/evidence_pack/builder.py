@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from src.budget.tokenizer import BudgetController
-from src.common.jsonio import canonical_json, sha256_json
+from src.common.jsonio import sha256_json
 from src.domain.models import TargetEvidence, TargetEvidencePack, TargetVisible
 
 
@@ -23,8 +23,12 @@ def build_target_evidence_pack(
         "non_intro_body": evidence.non_intro_sections,
         "reference_metadata": evidence.reference_metadata,
     }
-    serialized = canonical_json(source_payload)
-    result = budget_controller.apply(serialized, budget_tokens)
+    result = budget_controller.apply_structured(
+        source_payload,
+        budget_tokens,
+        preserved_fields=("target_id", "title", "abstract"),
+        field_order=("non_intro_body", "reference_metadata"),
+    )
     return TargetEvidencePack(
         target_id=visible.target_id,
         budget_tokens=budget_tokens,
