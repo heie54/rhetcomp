@@ -1,10 +1,13 @@
 {
-  "config_version": "baseline-v0.1-writer-contract-1",
-  "status": "not_implemented_before_stage_4",
+  "config_version": "baseline-v0.1-writer-2",
+  "status": "implemented_stage_4",
   "model": null,
-  "temperature": null,
-  "top_p": null,
-  "max_output_tokens": null,
-  "seed": null,
-  "citation_format": null
+  "temperature": 0.0,
+  "top_p": 1.0,
+  "max_output_tokens": 600,
+  "seed": 12345,
+  "citation_format": "inline_bracketed_numeric",
+  "system_prompt_version": "stage4-writer-system-1",
+  "task_prompt_version": "stage4-writer-task-1",
+  "desired_introduction_length": 250
 }
