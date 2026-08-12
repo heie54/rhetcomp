@@ -1,5 +1,41 @@
 {
-  "config_version": "baseline-v0.1-compiler-contract-1",
-  "status": "interface_only_stage_0",
-  "experience_compiler_enabled": false
+  "config_version": "baseline-v0.1-compiler-3",
+  "status": "experience_and_baseline_compilers",
+  "model": null,
+  "experience_compiler_enabled": true,
+  "extraction": {
+    "prompt_version": "stage2-extract-1",
+    "max_candidates_per_source": 5,
+    "single_pass": true,
+    "taxonomy_locked": false
+  },
+  "span_validation": {
+    "mode": "deterministic_exact"
+  },
+  "verifier": {
+    "prompt_version": "stage2-verify-1",
+    "admission_observation_support": ["supported"],
+    "admission_strategy_generalization": ["reasonable"]
+  },
+  "retrieval": {
+    "pair_retrieval": "deterministic_feature_hash",
+    "feature_hash_dimensions": 128,
+    "top_k": 20,
+    "min_cosine": 0.0
+  },
+  "adjudication": {
+    "prompt_version": "stage2-adjudicate-1",
+    "compatible_relations": ["equivalent", "a_subsumes_b", "b_subsumes_a"],
+    "require_nonconflicting_applicable_when": true
+  },
+  "summary": {
+    "prompt_version": "stage3-summary-1"
+  },
+  "guideline": {
+    "prompt_version": "stage3-guideline-1"
+  },
+  "library": {
+    "tier_order": ["stable_core", "supported_rare"],
+    "max_library_tokens": null
+  }
 }
