@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from src.domain.models import RepresentationArtifact, SourcePaper, TargetEvidencePack
+from src.domain.models import Experience, RepresentationArtifact, SourcePaper, TargetEvidencePack
 
 
 SCHEMA_LOADERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "SourcePaper": SourcePaper.from_dict,
     "TargetEvidencePack": TargetEvidencePack.from_dict,
     "RepresentationArtifact": RepresentationArtifact.from_dict,
+    "Experience": Experience.from_dict,
 }
 
 

@@ -130,15 +130,17 @@ def audit_runtime_gold_isolation(
         for name, path in evaluator_access.configured_roots().items()
     }
     role_capabilities["evaluator"] = sorted(evaluator_roots)
-    if evaluator_roots != {"target_gold": expected}:
+    if evaluator_roots.get("target_gold") != expected:
         violations.append({"role": "evaluator", "reason": "gold_capability_missing_or_wrong"})
+    if any("gold" in name.lower() and name != "target_gold" for name in evaluator_roots):
+        violations.append({"role": "evaluator", "reason": "unexpected_gold_capability"})
     if evaluator_access.target_gold_path("capability_probe").parent.resolve() != expected:
         violations.append({"role": "evaluator", "reason": "gold_path_resolution_wrong"})
 
     return {
         "passed": not violations,
         "role_capabilities": role_capabilities,
-        "evaluator_gold_root_matches_expected": evaluator_roots == {"target_gold": expected},
+        "evaluator_gold_root_matches_expected": evaluator_roots.get("target_gold") == expected,
         "violations": violations,
     }
 

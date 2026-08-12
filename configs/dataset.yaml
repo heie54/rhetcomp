@@ -1,5 +1,5 @@
 {
-  "config_version": "baseline-v0.1-dataset-pilot-1",
+  "config_version": "baseline-v0.1-dataset-pilot-2",
   "source_field": "ACL/NLP",
   "target_field": "Physics",
   "source_corpus": "ACL 2024 main-conference Introduction exemplars",
@@ -17,6 +17,11 @@
     "target_evidence": "data/target/evidence",
     "target_gold": "data/target/gold",
     "evidence_packs": "artifacts/evidence_packs",
+    "representations": "artifacts/representations",
+    "experiences": "artifacts/experiences",
+    "generations": "artifacts/generations",
+    "costs": "artifacts/costs",
+    "evaluations": "artifacts/evaluations",
     "audits": "artifacts/audits"
   }
 }

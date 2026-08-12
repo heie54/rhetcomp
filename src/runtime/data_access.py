@@ -36,6 +36,9 @@ class CompilerDataAccess:
             "target_visible": self._config.target_visible_root,
             "target_evidence": self._config.target_evidence_root,
             "evidence_packs": self._config.evidence_packs_root,
+            "representations": self._config.representations_root,
+            "experiences": self._config.experiences_root,
+            "costs": self._config.costs_root,
         }
 
     def source_paper_path(self, source_id: str) -> Path:
@@ -50,6 +53,15 @@ class CompilerDataAccess:
     def evidence_pack_path(self, target_id: str) -> Path:
         return _record_path(self._config.evidence_packs_root, target_id)
 
+    def representation_path(self, representation_id: str) -> Path:
+        return _record_path(self._config.representations_root, representation_id)
+
+    def experiences_dir(self) -> Path:
+        return self._config.experiences_root
+
+    def costs_dir(self) -> Path:
+        return self._config.costs_root
+
 
 @dataclass(frozen=True, slots=True)
 class WriterDataAccess:
@@ -63,6 +75,9 @@ class WriterDataAccess:
         return {
             "target_visible": self._config.target_visible_root,
             "evidence_packs": self._config.evidence_packs_root,
+            "representations": self._config.representations_root,
+            "generations": self._config.generations_root,
+            "costs": self._config.costs_root,
         }
 
     def target_visible_path(self, target_id: str) -> Path:
@@ -70,6 +85,15 @@ class WriterDataAccess:
 
     def evidence_pack_path(self, target_id: str) -> Path:
         return _record_path(self._config.evidence_packs_root, target_id)
+
+    def representation_path(self, representation_id: str) -> Path:
+        return _record_path(self._config.representations_root, representation_id)
+
+    def generation_path(self, generation_id: str) -> Path:
+        return _record_path(self._config.generations_root, generation_id)
+
+    def costs_dir(self) -> Path:
+        return self._config.costs_root
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,7 +105,17 @@ class EvaluatorDataAccess:
             raise TypeError("EvaluatorDataAccess requires EvaluatorRuntimeConfig")
 
     def configured_roots(self) -> Mapping[str, Path]:
-        return {"target_gold": self._config.target_gold_root}
+        return {
+            "target_gold": self._config.target_gold_root,
+            "generations": self._config.generations_root,
+            "evaluations": self._config.evaluations_root,
+        }
 
     def target_gold_path(self, target_id: str) -> Path:
         return _record_path(self._config.target_gold_root, target_id)
+
+    def generation_path(self, generation_id: str) -> Path:
+        return _record_path(self._config.generations_root, generation_id)
+
+    def evaluations_dir(self) -> Path:
+        return self._config.evaluations_root

@@ -159,6 +159,23 @@ class EvidenceLocation:
     sentence_start: int
     sentence_end: int
 
+    def __post_init__(self) -> None:
+        if self.section != "Introduction":
+            raise ValueError("Evidence location section must be Introduction")
+        if (
+            self.paragraph < 1
+            or self.sentence_start < 1
+            or self.sentence_end < self.sentence_start
+        ):
+            raise ValueError("Invalid evidence location coordinates")
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, value: dict[str, Any]) -> "EvidenceLocation":
+        return cls(**value)
+
 
 @dataclass(frozen=True)
 class ExperienceEvidence:
@@ -166,6 +183,24 @@ class ExperienceEvidence:
     location: EvidenceLocation
     span: str
     support_relation: Literal["instantiates_observed_pattern"]
+
+    def __post_init__(self) -> None:
+        _required_text(self.source_id, "experience_evidence.source_id")
+        _required_text(self.span, "experience_evidence.span")
+        if self.support_relation != "instantiates_observed_pattern":
+            raise ValueError("Invalid support_relation")
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, value: dict[str, Any]) -> "ExperienceEvidence":
+        return cls(
+            source_id=value["source_id"],
+            location=EvidenceLocation.from_dict(value["location"]),
+            span=value["span"],
+            support_relation=value["support_relation"],
+        )
 
 
 @dataclass(frozen=True)
@@ -183,6 +218,40 @@ class Experience:
     def __post_init__(self) -> None:
         if self.grounding_status not in self.ALLOWED_STATUSES:
             raise ValueError("Invalid grounding_status")
+        for name in ("experience_id", "observed_pattern", "strategy", "applicable_when"):
+            _required_text(getattr(self, name), f"experience.{name}")
+        if not self.evidence:
+            raise ValueError("Experience must carry at least one evidence span")
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, value: dict[str, Any]) -> "Experience":
+        return cls(
+            experience_id=value["experience_id"],
+            observed_pattern=value["observed_pattern"],
+            strategy=value["strategy"],
+            applicable_when=value["applicable_when"],
+            evidence=tuple(ExperienceEvidence.from_dict(item) for item in value["evidence"]),
+            grounding_status=value["grounding_status"],
+        )
+
+
+@dataclass(frozen=True)
+class ExperienceDerivedMeta:
+    """Diagnostic metadata kept outside the semantic Experience schema (spec §7)."""
+
+    experience_id: str
+    distinct_source_count: int
+    cluster_id: str
+    tier: Literal["stable_core", "supported_rare"]
+    verifier_result: dict[str, Any] | None
+    verifier_score: float | None
+    run_support: str | None
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
 
 
 @dataclass(frozen=True)

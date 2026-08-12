@@ -81,7 +81,9 @@ class Stage1IngestionTests(unittest.TestCase):
                     with self.assertRaises(AttributeError):
                         restricted.target_gold_path("ncphysics_fixture_001")
 
-            self.assertEqual(evaluator.configured_roots(), {"target_gold": gold_root})
+            self.assertEqual(evaluator.configured_roots()["target_gold"], gold_root)
+            self.assertIn("generations", evaluator.configured_roots())
+            self.assertIn("evaluations", evaluator.configured_roots())
             self.assertEqual(
                 evaluator.target_gold_path("ncphysics_fixture_001"),
                 gold_root / "ncphysics_fixture_001.json",

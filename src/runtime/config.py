@@ -13,17 +13,25 @@ class CompilerRuntimeConfig:
     target_visible_root: Path
     target_evidence_root: Path
     evidence_packs_root: Path
+    representations_root: Path
+    experiences_root: Path
+    costs_root: Path
 
 
 @dataclass(frozen=True, slots=True)
 class WriterRuntimeConfig:
     target_visible_root: Path
     evidence_packs_root: Path
+    representations_root: Path
+    generations_root: Path
+    costs_root: Path
 
 
 @dataclass(frozen=True, slots=True)
 class EvaluatorRuntimeConfig:
     target_gold_root: Path
+    generations_root: Path
+    evaluations_root: Path
 
 
 def _resolve(root: Path, configured_path: str) -> Path:
@@ -59,13 +67,19 @@ def load_compiler_runtime_config(
     paths = _role_paths(
         dataset_config_path,
         project_root,
-        ("source_normalized", "target_visible", "target_evidence", "evidence_packs"),
+        (
+            "source_normalized", "target_visible", "target_evidence", "evidence_packs",
+            "representations", "experiences", "costs",
+        ),
     )
     return CompilerRuntimeConfig(
         source_normalized_root=paths["source_normalized"],
         target_visible_root=paths["target_visible"],
         target_evidence_root=paths["target_evidence"],
         evidence_packs_root=paths["evidence_packs"],
+        representations_root=paths["representations"],
+        experiences_root=paths["experiences"],
+        costs_root=paths["costs"],
     )
 
 
@@ -76,11 +90,14 @@ def load_writer_runtime_config(
     paths = _role_paths(
         dataset_config_path,
         project_root,
-        ("target_visible", "evidence_packs"),
+        ("target_visible", "evidence_packs", "representations", "generations", "costs"),
     )
     return WriterRuntimeConfig(
         target_visible_root=paths["target_visible"],
         evidence_packs_root=paths["evidence_packs"],
+        representations_root=paths["representations"],
+        generations_root=paths["generations"],
+        costs_root=paths["costs"],
     )
 
 
@@ -88,5 +105,13 @@ def load_evaluator_runtime_config(
     dataset_config_path: str | Path,
     project_root: str | Path | None = None,
 ) -> EvaluatorRuntimeConfig:
-    paths = _role_paths(dataset_config_path, project_root, ("target_gold",))
-    return EvaluatorRuntimeConfig(target_gold_root=paths["target_gold"])
+    paths = _role_paths(
+        dataset_config_path,
+        project_root,
+        ("target_gold", "generations", "evaluations"),
+    )
+    return EvaluatorRuntimeConfig(
+        target_gold_root=paths["target_gold"],
+        generations_root=paths["generations"],
+        evaluations_root=paths["evaluations"],
+    )
