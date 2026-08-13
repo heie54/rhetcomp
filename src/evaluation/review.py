@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 from typing import Any, Mapping, Sequence
 
@@ -8,15 +9,18 @@ from src.domain.models import RepresentationArtifact, SourcePaper, TargetEvidenc
 
 _WORD = re.compile(r"\w+", re.UNICODE)
 _CITATION = re.compile(r"\[\d+\]")
+_CITATION_CONTENT = re.compile(r"\s*\d+(?:\s*(?:,|[-–])\s*\d+)*\s*")
 _IMPERATIVE_VERBS = frozenset(
     {
         "state", "present", "introduce", "position", "connect", "close", "describe",
         "use", "establish", "situate", "announce", "contrast", "define", "motivate",
         "open", "organize", "summarize", "summarise", "highlight", "compare", "frame",
+        "begin", "start", "build", "identify",
     }
 )
 _COPY_NGRAM = 4
 _NEAR_COPY_SPAN = 8
+_SOURCE_COPY_SPAN = 10
 
 
 def _tokens(text: str) -> list[str]:
@@ -28,19 +32,20 @@ def _shingles(words: Sequence[str], size: int) -> set[tuple[str, ...]]:
 
 
 def _longest_shared_span(left: Sequence[str], right: Sequence[str]) -> int:
+    if not left or not right:
+        return 0
+    right_positions: dict[str, list[int]] = {}
+    for index, token in enumerate(right):
+        right_positions.setdefault(token, []).append(index)
     longest = 0
-    right_set = _shingles(right, _COPY_NGRAM)
-    for index in range(len(left) - _COPY_NGRAM + 1):
-        ngram = tuple(left[index:index + _COPY_NGRAM])
-        if ngram in right_set:
-            run = _COPY_NGRAM
-            while (
-                index + run < len(left)
-                and index + run < len(right)
-                and left[index + run] == right[index + run]
-            ):
-                run += 1
+    previous: dict[int, int] = {}
+    for token in left:
+        current: dict[int, int] = {}
+        for right_index in right_positions.get(token, ()):
+            run = previous.get(right_index - 1, 0) + 1
+            current[right_index] = run
             longest = max(longest, run)
+        previous = current
     return longest
 
 
@@ -49,7 +54,8 @@ def _exact_or_near(needle: str, haystack: str) -> bool:
         return True
     needle_words = _tokens(needle)
     haystack_words = _tokens(haystack)
-    return _longest_shared_span(needle_words, haystack_words) >= _NEAR_COPY_SPAN
+    threshold = min(12, max(_NEAR_COPY_SPAN, math.ceil(len(needle_words) * 0.05)))
+    return _longest_shared_span(needle_words, haystack_words) >= threshold
 
 
 def check_gold_leakage(
@@ -80,24 +86,31 @@ def check_source_domain_leakage(
     generations: Sequence[dict[str, Any]],
     sources: Sequence[SourcePaper],
 ) -> dict[str, Any]:
-    source_shingles: set[tuple[str, ...]] = set()
-    for source in sources:
-        source_shingles |= _shingles(
-            _tokens(source.introduction.normalized_text), _COPY_NGRAM
-        )
+    source_tokens = {
+        source.source_id: _tokens(source.introduction.normalized_text) for source in sources
+    }
     violations: list[dict[str, Any]] = []
     for generation in generations:
         generation_words = _tokens(generation["text"])
-        overlaps = source_shingles & _shingles(generation_words, _COPY_NGRAM)
-        if overlaps:
-            violations.append(
-                {
-                    "generation_id": generation["generation_id"],
-                    "condition": generation["condition"],
-                    "shared_ngrams": list(overlaps)[:5],
-                }
-            )
-    return {"passed": not violations, "violations": violations}
+        for source_id, tokens in source_tokens.items():
+            shared_span = _longest_shared_span(generation_words, tokens)
+            threshold = min(_SOURCE_COPY_SPAN, len(tokens))
+            if threshold and shared_span >= threshold:
+                violations.append(
+                    {
+                        "generation_id": generation["generation_id"],
+                        "condition": generation["condition"],
+                        "source_id": source_id,
+                        "max_shared_span_tokens": shared_span,
+                        "threshold_tokens": threshold,
+                    }
+                )
+    return {
+        "passed": not violations,
+        "source_count": len(source_tokens),
+        "threshold_tokens": _SOURCE_COPY_SPAN,
+        "violations": violations,
+    }
 
 
 def check_guideline_experience_distinct(
@@ -212,7 +225,10 @@ def check_output_format_and_citations(
             issue = "placeholder_literal"
         else:
             bracket_content = re.findall(r"\[(.*?)\]", text)
-            if any(part and not part.strip().isdigit() for part in bracket_content):
+            if any(
+                part and not _CITATION_CONTENT.fullmatch(part)
+                for part in bracket_content
+            ):
                 issue = "non_numeric_bracket_citation"
             elif text.count("[") != text.count("]"):
                 issue = "unbalanced_brackets"

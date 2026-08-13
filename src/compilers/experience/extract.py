@@ -7,9 +7,11 @@ from typing import Any, Iterable
 
 from src.adapters.model import ModelAdapter, ModelRequest
 from src.compilers.config import CompilerSettings
+from src.common.structured_output import load_json_object
 from src.domain.models import EvidenceLocation, SourcePaper
 
 _WORD = re.compile(r"\w+", re.UNICODE)
+_EXTRACTION_MAX_OUTPUT_TOKENS = 16384
 _STOPWORDS = frozenset(
     {
         "the", "a", "an", "of", "to", "in", "on", "for", "and", "or", "with", "by",
@@ -39,6 +41,8 @@ class ExtractionOutcome:
     candidates: tuple[ExtractionCandidate, ...]
     trace: tuple[dict[str, Any], ...]
     adapter_mode: str
+    format_repair_count: int
+    deterministic_fallback_count: int
 
 
 def _derive_topic(text: str) -> str:
@@ -94,7 +98,13 @@ _EXTRACTION_SYSTEM = (
     "You are a scientific-writing observer. Extract atomic rhetorical candidates from the "
     "provided scientific Introduction text. One candidate corresponds to one observable "
     "rhetorical decision or pattern in the text. Do not infer author intention unless it is "
-    "directly observable. Do not assign numerical confidence. Do not use a fixed taxonomy."
+    "directly observable. Do not assign numerical confidence. Do not use a fixed taxonomy. "
+    "Return only the requested compact JSON object; do not emit analysis, reasoning, or Markdown."
+)
+
+_FORMAT_REPAIR_SYSTEM = (
+    "Repair the supplied extraction result into valid JSON without adding, deleting, or "
+    "semantically changing candidates. Return only one JSON object with key candidates."
 )
 
 
@@ -112,7 +122,8 @@ def _extraction_user(source: SourcePaper, settings: CompilerSettings) -> str:
         "observable in the span, without asserting author intention), "
         "\"strategy\" (an actionable generalized writing strategy inferred from the observed "
         "pattern), and \"applicable_when\" (the writing conditions under which the strategy is "
-        "expected to be useful). Return at most {max_candidates} candidates.\n"
+        "expected to be useful). Return between 1 and {max_candidates} candidates for a non-empty "
+        "Introduction. Keep each descriptive field to one concise sentence. Return only JSON.\n"
     ).format(
         source_id=source.source_id,
         text=source.introduction.normalized_text,
@@ -125,8 +136,8 @@ def _parse_extraction_output(
     source_id: str,
 ) -> tuple[list[ExtractionCandidate], str | None]:
     try:
-        payload = json.loads(raw)
-    except json.JSONDecodeError as exc:
+        payload = load_json_object(raw)
+    except (json.JSONDecodeError, ValueError) as exc:
         return [], f"invalid_json: {exc}"
     if not isinstance(payload, dict) or "candidates" not in payload:
         return [], "missing_candidates_key"
@@ -164,21 +175,72 @@ def _extract_with_model(
     sources: Iterable[SourcePaper],
     adapter: ModelAdapter,
     settings: CompilerSettings,
-) -> tuple[list[ExtractionCandidate], list[dict[str, Any]]]:
+    *,
+    formal_mode: bool = False,
+    run_id: str = "unscoped",
+    config_hash: str | None = None,
+    data_manifest_hash: str | None = None,
+) -> tuple[list[ExtractionCandidate], list[dict[str, Any]], int]:
     candidates: list[ExtractionCandidate] = []
     trace: list[dict[str, Any]] = []
+    repair_count = 0
     for source in sources:
-        response = adapter.generate(
-            ModelRequest(
-                system_prompt=_EXTRACTION_SYSTEM,
-                user_prompt=_extraction_user(source, settings),
-                max_output_tokens=4096,
-                temperature=0.0,
-                top_p=1.0,
-                seed=0,
-            )
+        request = ModelRequest(
+            system_prompt=_EXTRACTION_SYSTEM,
+            user_prompt=_extraction_user(source, settings),
+            max_output_tokens=_EXTRACTION_MAX_OUTPUT_TOKENS,
+            temperature=None if formal_mode else 0.0,
+            top_p=None if formal_mode else 1.0,
+            seed=None if formal_mode else 0,
+            thinking_enabled=True if formal_mode else None,
+            reasoning_effort="high" if formal_mode else None,
+            response_format="json_object" if formal_mode else "text",
+            run_id=run_id,
+            role="experience_extractor",
+            run_mode="formal" if formal_mode else "mechanics",
+            config_hash=config_hash,
+            data_manifest_hash=data_manifest_hash,
         )
+        response = adapter.generate(request)
         parsed, error = _parse_extraction_output(response.text, source.source_id)
+        call_metadata = dict(response.metadata)
+        if error:
+            repair_count += 1
+            repair = adapter.generate(
+                ModelRequest(
+                    system_prompt=_FORMAT_REPAIR_SYSTEM,
+                    user_prompt=(
+                        f"Source id: {source.source_id}\n"
+                        f"Parser error: {error}\n"
+                        f"Invalid result:\n{response.text}"
+                    ),
+                    max_output_tokens=_EXTRACTION_MAX_OUTPUT_TOKENS,
+                    temperature=None if formal_mode else 0.0,
+                    top_p=None if formal_mode else 1.0,
+                    seed=None if formal_mode else 0,
+                    thinking_enabled=True if formal_mode else None,
+                    reasoning_effort="high" if formal_mode else None,
+                    response_format="json_object" if formal_mode else "text",
+                    run_id=run_id,
+                    role="experience_extractor_format_repair",
+                    run_mode="formal" if formal_mode else "mechanics",
+                    config_hash=config_hash,
+                    data_manifest_hash=data_manifest_hash,
+                )
+            )
+            parsed, repair_error = _parse_extraction_output(repair.text, source.source_id)
+            trace.append(
+                {
+                    "source_id": source.source_id,
+                    "stage": "extract_format_repair",
+                    "level": "error" if repair_error else "info",
+                    "initial_error": error,
+                    "repair_error": repair_error,
+                    "provider_call": dict(repair.metadata),
+                }
+            )
+            error = repair_error
+            call_metadata = dict(repair.metadata)
         if error:
             trace.append(
                 {
@@ -186,27 +248,58 @@ def _extract_with_model(
                     "stage": "extract",
                     "level": "error",
                     "message": error,
+                    "provider_call": call_metadata,
                 }
             )
         else:
             candidates.extend(parsed)
-    return candidates, trace
+            if formal_mode:
+                trace.append(
+                    {
+                        "source_id": source.source_id,
+                        "stage": "extract",
+                        "level": "info",
+                        "candidate_count": len(parsed),
+                        "provider_call": call_metadata,
+                    }
+                )
+    return candidates, trace, repair_count
 
 
 def extract_candidates(
     sources: Iterable[SourcePaper],
     settings: CompilerSettings,
     adapter: ModelAdapter | None = None,
+    *,
+    formal_mode: bool = False,
+    run_id: str = "unscoped",
+    config_hash: str | None = None,
+    data_manifest_hash: str | None = None,
 ) -> ExtractionOutcome:
     """Single-pass open atomic extraction (spec §8.1)."""
+    if formal_mode and adapter is None:
+        raise ValueError("Formal extraction requires a real model adapter")
     if adapter is None:
         candidates, trace = _extract_deterministic(sources, settings)
         mode = "deterministic"
+        repair_count = 0
+        fallback_count = 0
     else:
-        candidates, trace = _extract_with_model(sources, adapter, settings)
+        candidates, trace, repair_count = _extract_with_model(
+            sources,
+            adapter,
+            settings,
+            formal_mode=formal_mode,
+            run_id=run_id,
+            config_hash=config_hash,
+            data_manifest_hash=data_manifest_hash,
+        )
         mode = f"model:{adapter.model_name}"
+        fallback_count = 0
     return ExtractionOutcome(
         candidates=tuple(candidates),
         trace=tuple(trace),
         adapter_mode=mode,
+        format_repair_count=repair_count,
+        deterministic_fallback_count=fallback_count,
     )

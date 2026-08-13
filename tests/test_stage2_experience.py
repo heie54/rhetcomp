@@ -197,6 +197,50 @@ class Stage2ExperienceTests(unittest.TestCase):
         self.assertEqual(malformed, [])
         self.assertIn("invalid_json", error)
 
+    def test_model_extraction_parser_accepts_only_surrounding_json_fence(self) -> None:
+        raw = """```json
+        {"candidates": []}
+        ```"""
+        parsed, error = _parse_extraction_output(raw, "acl2024_x")
+        self.assertEqual(parsed, [])
+        self.assertIsNone(error)
+        _, error = _parse_extraction_output(
+            'analysis first\n{"candidates": []}', "acl2024_x"
+        )
+        self.assertIn("invalid_json", error)
+
+    def test_verifier_allows_exactly_one_format_repair(self) -> None:
+        class RepairingAdapter(ModelAdapter):
+            model_name = "fake"
+
+            def __init__(self) -> None:
+                self.requests: list[ModelRequest] = []
+
+            def generate(self, request: ModelRequest) -> ModelResponse:
+                self.requests.append(request)
+                text = (
+                    "not json"
+                    if len(self.requests) == 1
+                    else '{"observation_support":"supported",'
+                    '"strategy_generalization":"reasonable","notes":"bounded"}'
+                )
+                return ModelResponse(
+                    text=text,
+                    input_tokens=10,
+                    output_tokens=5,
+                    latency_ms=1,
+                    metadata={"call_id": f"call_{len(self.requests)}"},
+                )
+
+        adapter = RepairingAdapter()
+        candidate = _candidate("acl2024_a", 1, 1, 1, "Some span.")
+        checked = verify_candidate(candidate, self.settings, adapter=adapter, formal_mode=True)
+        self.assertEqual(checked.grounding_status, "support_verified")
+        self.assertEqual(len(adapter.requests), 2)
+        self.assertEqual(adapter.requests[0].max_output_tokens, 2048)
+        self.assertEqual(adapter.requests[1].role, "experience_verifier_format_repair")
+        self.assertEqual(checked.provider_metadata["call_id"], "call_2")
+
     def test_retrieval_does_not_merge_on_cosine(self) -> None:
         sources = [
             _source("acl2024_a", "Language systems generalize beyond memorized examples."),
@@ -238,6 +282,46 @@ class Stage2ExperienceTests(unittest.TestCase):
                         for a in adjudicated
                     ) or len(item.member_indices) == 1
                 )
+
+    def test_adjudicator_allows_exactly_one_format_repair(self) -> None:
+        class RepairingAdapter(ModelAdapter):
+            model_name = "fake"
+
+            def __init__(self) -> None:
+                self.requests: list[ModelRequest] = []
+
+            def generate(self, request: ModelRequest) -> ModelResponse:
+                self.requests.append(request)
+                text = (
+                    "not json"
+                    if len(self.requests) == 1
+                    else '{"relation":"related_but_distinct",'
+                    '"compatible_for_canonicalization":false,'
+                    '"applicability_conflict":false,"notes":"distinct"}'
+                )
+                return ModelResponse(
+                    text=text,
+                    input_tokens=10,
+                    output_tokens=5,
+                    latency_ms=1,
+                    metadata={"call_id": f"call_{len(self.requests)}"},
+                )
+
+        adapter = RepairingAdapter()
+        left = verify_candidate(
+            _candidate("acl2024_a", 1, 1, 1, "First span."), self.settings
+        )
+        right = verify_candidate(
+            _candidate("acl2024_b", 1, 1, 1, "Second span."), self.settings
+        )
+        result = adjudicate_pair(
+            left, right, 0, 1, self.settings, adapter=adapter, formal_mode=True
+        )
+        self.assertEqual(result.relation, "related_but_distinct")
+        self.assertEqual(len(adapter.requests), 2)
+        self.assertEqual(adapter.requests[0].max_output_tokens, 4096)
+        self.assertEqual(adapter.requests[1].role, "experience_adjudicator_format_repair")
+        self.assertEqual(result.provider_metadata["call_id"], "call_2")
 
     def test_canonicalization_never_merges_without_adjudication(self) -> None:
         # Two identical candidates that are high-cosine but explicitly adjudicated

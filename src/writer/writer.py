@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import asdict, dataclass
 from typing import Any
 
@@ -35,13 +36,124 @@ class GenerationArtifact:
     output_tokens: int
     latency_ms: int
     text: str
+    citation_indices: tuple[int, ...] = ()
+    citation_valid: bool = True
+    provider_metadata: dict[str, Any] | None = None
+    run_mode: str = "mechanics"
+    run_id: str = "unscoped"
+    config_hash: str | None = None
+    data_manifest_hash: str | None = None
+    provider_profile_hash: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.run_mode not in {"mechanics", "formal"}:
+            raise ValueError("Invalid generation run mode")
+        if self.run_mode == "formal" and any(
+            not value
+            for value in (
+                self.run_id,
+                self.config_hash,
+                self.data_manifest_hash,
+                self.provider_profile_hash,
+            )
+        ):
+            raise ValueError("Formal generation requires complete artifact metadata")
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
     @classmethod
     def from_dict(cls, value: dict[str, Any]) -> "GenerationArtifact":
-        return cls(**value)
+        payload = dict(value)
+        payload["citation_indices"] = tuple(payload.get("citation_indices", ()))
+        return cls(**payload)
+
+
+_CITATION = re.compile(r"\[(\d+(?:\s*(?:,|[-–])\s*\d+)*)\]")
+_BRACKET_CONTENT = re.compile(r"\[(.*?)\]")
+_SOURCE_CITATION = re.compile(r"\[(?:\s*\d+\s*(?:,|[-–])?\s*)+\]")
+
+
+def citation_indices(text: str) -> tuple[int, ...]:
+    values: list[int] = []
+    for match in _CITATION.finditer(text):
+        for part in re.split(r"\s*,\s*", match.group(1)):
+            range_match = re.fullmatch(r"(\d+)\s*[-–]\s*(\d+)", part)
+            if range_match:
+                start, end = map(int, range_match.groups())
+                if start <= end:
+                    values.extend(range(start, end + 1))
+                continue
+            values.append(int(part))
+    return tuple(values)
+
+
+def evidence_prompt_content(pack: TargetEvidencePack) -> str:
+    """Remove source-paper citation markers while preserving the frozen evidence artifact."""
+    try:
+        payload = json.loads(pack.content)
+    except json.JSONDecodeError:
+        return pack.content
+    if not isinstance(payload, dict):
+        return pack.content
+    prompt_payload = dict(payload)
+    for key in ("abstract",):
+        value = prompt_payload.get(key)
+        if isinstance(value, str):
+            prompt_payload[key] = _SOURCE_CITATION.sub("", value)
+    non_intro = prompt_payload.get("non_intro_body")
+    if isinstance(non_intro, dict):
+        prompt_payload["non_intro_body"] = {
+            key: _SOURCE_CITATION.sub("", value) if isinstance(value, str) else value
+            for key, value in non_intro.items()
+        }
+    references = prompt_payload.get("reference_metadata")
+    if isinstance(references, list):
+        normalized_references = []
+        for index, reference in enumerate(references, start=1):
+            if not isinstance(reference, dict):
+                normalized_references.append(reference)
+                continue
+            normalized = dict(reference)
+            normalized["idx"] = index
+            if isinstance(normalized.get("title"), str):
+                normalized["title"] = _SOURCE_CITATION.sub("", normalized["title"])
+            normalized_references.append(normalized)
+        prompt_payload["reference_metadata"] = normalized_references
+    return json.dumps(prompt_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def citation_availability_instruction(pack: TargetEvidencePack) -> str:
+    try:
+        payload = json.loads(pack.content)
+    except json.JSONDecodeError:
+        payload = {}
+    references = payload.get("reference_metadata", []) if isinstance(payload, dict) else []
+    reference_count = len(references) if isinstance(references, list) else 0
+    if reference_count == 0:
+        return (
+            "Citation availability: reference_metadata is empty. Do not emit square-bracket "
+            "citations or any citation numbers in the Introduction."
+        )
+    return (
+        f"Citation availability: reference_metadata has {reference_count} entries. Every expanded "
+        f"citation index must be between 1 and {reference_count}, inclusive."
+    )
+
+
+def citations_within_target_evidence(text: str, pack: TargetEvidencePack) -> tuple[tuple[int, ...], bool]:
+    try:
+        payload = json.loads(pack.content)
+    except json.JSONDecodeError:
+        payload = {}
+    references = payload.get("reference_metadata", [])
+    reference_count = len(references) if isinstance(references, list) else 0
+    indices = citation_indices(text)
+    bracket_content = _BRACKET_CONTENT.findall(text)
+    syntax_valid = all(bool(part) and _CITATION.fullmatch(f"[{part}]") for part in bracket_content)
+    brackets_balanced = text.count("[") == text.count("]")
+    references_valid = all(1 <= index <= reference_count for index in indices)
+    return indices, syntax_valid and brackets_balanced and references_valid
 
 
 def _generation_id(target_id: str, condition: str, prompt_hash: str, text: str) -> str:
@@ -110,6 +222,12 @@ class Writer:
         pack: TargetEvidencePack,
         condition: str,
         representation: RepresentationArtifact | None = None,
+        *,
+        formal_mode: bool = False,
+        run_id: str = "unscoped",
+        config_hash: str | None = None,
+        data_manifest_hash: str | None = None,
+        provider_profile_hash: str | None = None,
     ) -> GenerationArtifact:
         if condition not in WRITER_CONDITIONS:
             raise ValueError(f"Unknown writer condition: {condition}")
@@ -123,11 +241,13 @@ class Writer:
             representation_hash = representation.content_hash
 
         system_prompt = build_system_prompt(self.settings)
-        task_prompt = build_task_prompt(pack.target_id)
+        task_prompt = "\n".join(
+            [build_task_prompt(pack.target_id), citation_availability_instruction(pack)]
+        )
         condition_text = build_condition_text(
             condition, representation.content if representation else None
         )
-        evidence_content = pack.content
+        evidence_content = evidence_prompt_content(pack)
         target_evidence_hash = sha256_text(evidence_content)
         template_hash = prompt_template_hash(system_prompt, task_prompt)
         base_hash = base_prompt_hash(system_prompt, task_prompt, evidence_content)
@@ -139,6 +259,14 @@ class Writer:
             representation.content if representation else None,
         )
 
+        if formal_mode and self.adapter is None:
+            raise ValueError("Formal Writer requires a real model adapter")
+        if formal_mode and any(
+            not value
+            for value in (run_id, config_hash, data_manifest_hash, provider_profile_hash)
+        ):
+            raise ValueError("Formal Writer requires complete artifact metadata")
+        provider_metadata = None
         if self.adapter is None:
             text = _deterministic_introduction(pack, condition, representation)
             input_tokens = len(
@@ -159,6 +287,14 @@ class Writer:
                     temperature=self.settings.temperature,
                     top_p=self.settings.top_p,
                     seed=self.settings.seed,
+                    thinking_enabled=False if formal_mode else None,
+                    reasoning_effort=None,
+                    response_format="text",
+                    run_id=run_id,
+                    role=f"writer:{condition}",
+                    run_mode="formal" if formal_mode else "mechanics",
+                    config_hash=config_hash,
+                    data_manifest_hash=data_manifest_hash,
                 )
             )
             text = response.text
@@ -166,7 +302,9 @@ class Writer:
             output_tokens = counting.output_tokens
             latency_ms = counting.latency_ms
             writer_model = self.adapter.model_name
+            provider_metadata = dict(response.metadata)
 
+        cited_indices, citations_valid = citations_within_target_evidence(text, pack)
         generation_id = _generation_id(pack.target_id, condition, full_hash, text)
         return GenerationArtifact(
             generation_id=generation_id,
@@ -182,4 +320,12 @@ class Writer:
             output_tokens=output_tokens,
             latency_ms=latency_ms,
             text=text,
+            citation_indices=cited_indices,
+            citation_valid=citations_valid,
+            provider_metadata=provider_metadata,
+            run_mode="formal" if formal_mode else "mechanics",
+            run_id=run_id,
+            config_hash=config_hash,
+            data_manifest_hash=data_manifest_hash,
+            provider_profile_hash=provider_profile_hash,
         )

@@ -1,0 +1,12 @@
+{
+  "config_version": "baseline-v0.1-budget-formal-1",
+  "run_mode": "formal",
+  "tokenizer": {
+    "name": "deepseek_v4_flash_hf",
+    "model_repo": "deepseek-ai/DeepSeek-V4-Flash",
+    "revision": "60d8d70",
+    "local_path": "data/tokenizers/deepseek-v4-flash/60d8d70"
+  },
+  "target_evidence_tokens": 8000,
+  "writing_condition_tokens": 4000
+}

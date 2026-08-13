@@ -148,6 +148,39 @@ class Stage5PilotTests(unittest.TestCase):
         self.assertFalse(check["passed"])
         self.assertEqual(check["violations"][0]["source"], "generation_raw")
 
+    def test_shifted_near_copy_of_gold_is_detected(self) -> None:
+        gold_text = (
+            "Alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu."
+        )
+        generations = [
+            _generation(
+                "ncphysics_t001",
+                "raw",
+                "Unrelated prefix gamma delta epsilon zeta eta theta iota kappa changed suffix.",
+            )
+        ]
+        check = check_gold_leakage(
+            generations,
+            {"ncphysics_t001": gold_text},
+            {"ncphysics_t001": _pack()},
+            _representations(),
+        )
+        self.assertFalse(check["passed"])
+
+    def test_short_overlap_in_long_gold_is_not_near_copy(self) -> None:
+        gold_text = " ".join(f"gold{i}" for i in range(220))
+        overlap = " ".join(f"gold{i}" for i in range(10, 20))
+        generations = [
+            _generation("ncphysics_t001", "raw", f"Context {overlap} conclusion.")
+        ]
+        check = check_gold_leakage(
+            generations,
+            {"ncphysics_t001": gold_text},
+            {"ncphysics_t001": _pack()},
+            _representations(),
+        )
+        self.assertTrue(check["passed"], check)
+
     def test_source_domain_leakage_is_detected(self) -> None:
         source = _source("acl2024_a")
         source_sentence = source.introduction.paragraphs[0].sentences[0].text
@@ -157,6 +190,30 @@ class Stage5PilotTests(unittest.TestCase):
         check = check_source_domain_leakage(generations, [source])
         self.assertFalse(check["passed"])
         self.assertEqual(check["violations"][0]["condition"], "experience")
+
+    def test_common_four_word_phrase_is_not_source_domain_leakage(self) -> None:
+        source = normalize_source_record(
+            {
+                "source_id": "acl2024_common",
+                "title": "Long source",
+                "authors": ["A. Author"],
+                "venue": "ACL 2024",
+                "track": "main",
+                "introduction": (
+                    "In this work we present a language architecture with carefully controlled "
+                    "experiments and extensive task-specific analysis."
+                ),
+            }
+        )
+        generations = [
+            _generation(
+                "ncphysics_t001",
+                "raw",
+                "In this work we investigate a physics system under external forcing.",
+            )
+        ]
+        check = check_source_domain_leakage(generations, [source])
+        self.assertTrue(check["passed"], check["violations"])
 
     def test_guideline_experience_distinct_detects_identical_generations(self) -> None:
         reps = _representations()
@@ -189,6 +246,18 @@ class Stage5PilotTests(unittest.TestCase):
             )
         )
         self.assertEqual(check["actionable_ratio"], 0.5)
+
+    def test_experience_actionability_recognizes_common_imperatives(self) -> None:
+        entries = [
+            {
+                "strategy": f"{verb} with a bounded rhetorical move.",
+                "observed_pattern": "The source uses a bounded move.",
+                "applicable_when": "When the Introduction needs that move.",
+            }
+            for verb in ("Begin", "Start", "Build", "Identify")
+        ]
+        check = check_experience_strategies_actionable(json.dumps(entries))
+        self.assertTrue(check["passed"], check)
 
     def test_output_format_detects_malformed_citation(self) -> None:
         generations = [

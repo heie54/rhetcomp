@@ -268,10 +268,27 @@ class RepresentationArtifact:
     content: str
     content_tokens: int
     content_hash: str
+    run_id: str = "unscoped"
+    run_mode: str = "mechanics"
+    config_hash: str | None = None
+    data_manifest_hash: str | None = None
+    provider_profile_hash: str | None = None
 
     def __post_init__(self) -> None:
         if self.type not in self.ALLOWED_TYPES:
             raise ValueError("Invalid representation type")
+        if self.run_mode not in {"mechanics", "formal"}:
+            raise ValueError("Invalid representation run mode")
+        if self.run_mode == "formal" and any(
+            not value
+            for value in (
+                self.run_id,
+                self.config_hash,
+                self.data_manifest_hash,
+                self.provider_profile_hash,
+            )
+        ):
+            raise ValueError("Formal representation requires complete artifact metadata")
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

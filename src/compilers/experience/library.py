@@ -15,6 +15,7 @@ class LibraryBudgetResult:
     content_hash: str
     included_experience_ids: tuple[str, ...]
     excluded_experience_ids: tuple[str, ...]
+    pre_budget_tokens: int
 
 
 def _library_entry(canonical: CanonicalExperience) -> dict[str, Any]:
@@ -58,18 +59,21 @@ def build_library(
         ),
     )
 
+    entries = [(item, _library_entry(item)) for item in ordered]
+    pre_budget_tokens = len(
+        tokenizer.encode(canonical_json([entry for _, entry in entries]))
+    )
     included: list[dict[str, Any]] = []
     excluded: list[str] = []
     tokens = 0
-    for item in ordered:
-        entry = _library_entry(item)
-        entry_text = canonical_json(entry)
-        entry_tokens = len(tokenizer.encode(entry_text))
-        if tokens > 0 and tokens + entry_tokens > limit:
+    for item, entry in entries:
+        tentative = canonical_json([*included, entry])
+        tentative_tokens = len(tokenizer.encode(tentative))
+        if tentative_tokens > limit:
             excluded.append(item.experience.experience_id)
             continue
         included.append(entry)
-        tokens += entry_tokens
+        tokens = tentative_tokens
 
     content = canonical_json(included)
     content_tokens = len(tokenizer.encode(content))
@@ -79,4 +83,5 @@ def build_library(
         content_hash=sha256_text(content),
         included_experience_ids=tuple(item["experience_id"] for item in included),
         excluded_experience_ids=tuple(excluded),
+        pre_budget_tokens=pre_budget_tokens,
     )

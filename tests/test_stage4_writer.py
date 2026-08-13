@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import unittest
 from pathlib import Path
 
@@ -10,7 +11,13 @@ from src.domain.models import RepresentationArtifact, TargetEvidence, TargetVisi
 from src.evidence_pack.builder import build_target_evidence_pack
 from src.ingest.target import normalize_target_record
 from src.writer.config import WRITER_CONDITIONS, load_writer_settings
-from src.writer.writer import GenerationArtifact, Writer
+from src.writer.writer import (
+    GenerationArtifact,
+    Writer,
+    citation_availability_instruction,
+    citations_within_target_evidence,
+    evidence_prompt_content,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -88,6 +95,41 @@ class Stage4WriterTests(unittest.TestCase):
                 '"applicable_when": "w", "evidence": []}]',
             ),
         }
+
+    def test_citation_ranges_expand_and_out_of_range_indices_are_invalid(self) -> None:
+        _, valid = citations_within_target_evidence("Claim [1-1].", self.pack)
+        self.assertTrue(valid)
+        _, valid = citations_within_target_evidence("Claim [1-3].", self.pack)
+        self.assertFalse(valid)
+        _, valid = citations_within_target_evidence("Claim [2].", self.pack)
+        self.assertFalse(valid)
+        _, valid = citations_within_target_evidence("Claim [1].", self.pack)
+        self.assertTrue(valid)
+
+    def test_evidence_prompt_removes_source_citation_markers_only(self) -> None:
+        payload = json.loads(self.pack.content)
+        payload["abstract"] = "Prior work [41-44] motivates this target."
+        from dataclasses import replace
+
+        prompt = evidence_prompt_content(
+            replace(self.pack, content=json.dumps(payload, ensure_ascii=False))
+        )
+        parsed = json.loads(prompt)
+        self.assertNotIn("[41-44]", parsed["abstract"])
+        self.assertEqual(parsed["reference_metadata"][0]["idx"], 1)
+        self.assertEqual(
+            parsed["reference_metadata"][0]["title"],
+            payload["reference_metadata"][0]["title"],
+        )
+
+    def test_citation_availability_instruction_handles_empty_references(self) -> None:
+        from dataclasses import replace
+
+        payload = json.loads(self.pack.content)
+        payload["reference_metadata"] = []
+        empty_pack = replace(self.pack, content=json.dumps(payload, ensure_ascii=False))
+        self.assertIn("Do not emit square-bracket", citation_availability_instruction(empty_pack))
+        self.assertIn("between 1 and 1", citation_availability_instruction(self.pack))
 
     def _run_all_conditions(self):
         artifacts: dict[str, GenerationArtifact] = {}

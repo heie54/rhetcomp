@@ -16,6 +16,7 @@ class CompilerSettings:
     verifier_prompt_version: str
     admission_observation_support: tuple[str, ...]
     admission_strategy_generalization: tuple[str, ...]
+    retrieval_backend: str
     retrieval_dimensions: int
     retrieval_top_k: int
     retrieval_min_cosine: float
@@ -64,7 +65,10 @@ def load_compiler_settings(compiler_config_path: str) -> CompilerSettings:
             verifier.get("admission_strategy_generalization"),
             "verifier.admission_strategy_generalization",
         ),
-        retrieval_dimensions=int(retrieval.get("feature_hash_dimensions", 128)),
+        retrieval_backend=str(retrieval.get("pair_retrieval", "deterministic_feature_hash")),
+        retrieval_dimensions=int(
+            retrieval.get("dimensions", retrieval.get("feature_hash_dimensions", 128))
+        ),
         retrieval_top_k=int(retrieval.get("top_k", 10)),
         retrieval_min_cosine=float(retrieval.get("min_cosine", 0.0)),
         adjudication_prompt_version=adjudication["prompt_version"],

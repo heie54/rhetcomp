@@ -1,0 +1,14 @@
+{
+  "config_version": "baseline-v0.1-writer-formal-1",
+  "status": "formal_real_writer",
+  "model": "deepseek-v4-flash",
+  "temperature": 0.0,
+  "top_p": null,
+  "max_output_tokens": 600,
+  "seed": null,
+  "citation_format": "inline_bracketed_numeric",
+  "system_prompt_version": "stage4r-writer-system-3",
+  "task_prompt_version": "stage4r-writer-task-2",
+  "desired_introduction_length": 250,
+  "thinking_enabled": false
+}

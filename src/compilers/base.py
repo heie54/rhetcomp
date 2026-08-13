@@ -17,6 +17,12 @@ def build_representation(
     compiler_input_tokens: int,
     compiler_output_tokens: int,
     compiler_calls: int,
+    *,
+    run_id: str = "unscoped",
+    run_mode: str = "mechanics",
+    config_hash: str | None = None,
+    data_manifest_hash: str | None = None,
+    provider_profile_hash: str | None = None,
 ) -> RepresentationArtifact:
     """Build the common representation wrapper (spec §9)."""
     content_hash = sha256_text(content)
@@ -41,6 +47,11 @@ def build_representation(
         content=content,
         content_tokens=content_tokens,
         content_hash=content_hash,
+        run_id=run_id,
+        run_mode=run_mode,
+        config_hash=config_hash,
+        data_manifest_hash=data_manifest_hash,
+        provider_profile_hash=provider_profile_hash,
     )
 
 

@@ -1,0 +1,44 @@
+{
+  "config_version": "baseline-v0.1-providers-3",
+  "profiles": {
+    "deepseek_compiler_v1": {
+      "provider": "deepseek",
+      "model": "deepseek-v4-flash",
+      "protocol": "openai_chat_completions",
+      "gateway": "opencode_go",
+      "user_agent": "rhetcomp/0.1.0",
+      "thinking_enabled": true,
+      "reasoning_effort": "high",
+      "temperature": null,
+      "top_p": null,
+      "seed": null,
+      "stream": false,
+      "max_retries": 3
+    },
+    "deepseek_writer_v1": {
+      "provider": "deepseek",
+      "model": "deepseek-v4-flash",
+      "protocol": "openai_chat_completions",
+      "gateway": "opencode_go",
+      "user_agent": "rhetcomp/0.1.0",
+      "thinking_enabled": false,
+      "reasoning_effort": null,
+      "temperature": 0.0,
+      "top_p": null,
+      "seed": null,
+      "stream": false,
+      "max_retries": 3
+    },
+    "qwen_embedding_v1": {
+      "provider": "qwen",
+      "model": "qwen3.7-text-embedding",
+      "protocol": "openai_embeddings",
+      "gateway": "alibaba_model_studio",
+      "stream": false,
+      "dimensions": 1024,
+      "output_type": "dense",
+      "max_retries": 3,
+      "max_batch_size": 20
+    }
+  }
+}

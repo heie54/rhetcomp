@@ -59,6 +59,21 @@ env/
 /tmp/
 /temp/
 
+# Formal raw/licensed corpora and locally provisioned tokenizer assets
+/data/raw/
+/data/formal/
+/data/tokenizers/
+
+# Paid-call payloads and large formal run outputs stay local; audits/manifests remain reviewable
+/artifacts/formal_pilot/**/calls/
+/artifacts/formal_pilot/**/embedding_cache/
+/artifacts/formal_pilot/**/evidence_packs/
+/artifacts/formal_pilot/**/experiences/
+/artifacts/formal_pilot/**/representations/
+/artifacts/formal_pilot/**/generations/
+/artifacts/formal_pilot/**/costs/
+/artifacts/formal_pilot/**/evaluations/
+
 # IDE and operating-system metadata
 .idea/
 .vscode/

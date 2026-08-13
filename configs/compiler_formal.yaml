@@ -1,0 +1,39 @@
+{
+  "config_version": "baseline-v0.1-compiler-formal-1",
+  "status": "formal_experience_compiler",
+  "model": "deepseek-v4-flash",
+  "experience_compiler_enabled": true,
+  "extraction": {
+    "prompt_version": "stage2r-extract-3",
+    "max_candidates_per_source": 3,
+    "single_pass": true,
+    "taxonomy_locked": false,
+    "max_format_repairs": 1
+  },
+  "span_validation": {"mode": "deterministic_exact"},
+  "verifier": {
+    "prompt_version": "stage2r-verify-2",
+    "admission_observation_support": ["supported"],
+    "admission_strategy_generalization": ["reasonable"]
+  },
+  "retrieval": {
+    "pair_retrieval": "qwen3_7_text_embedding",
+    "model": "qwen3.7-text-embedding",
+    "dimensions": 1024,
+    "output_type": "dense",
+    "top_k": 20,
+    "min_cosine": -1.0,
+    "automatic_merge": false
+  },
+  "adjudication": {
+    "prompt_version": "stage2r-adjudicate-2",
+    "compatible_relations": ["equivalent", "a_subsumes_b", "b_subsumes_a"],
+    "require_nonconflicting_applicable_when": true
+  },
+  "summary": {"prompt_version": "stage3r-summary-1"},
+  "guideline": {"prompt_version": "stage3r-guideline-1"},
+  "library": {
+    "tier_order": ["stable_core", "supported_rare"],
+    "max_library_tokens": 4000
+  }
+}

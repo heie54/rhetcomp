@@ -1,0 +1,50 @@
+{
+  "config_version": "baseline-v0.1-dataset-formal-pilot-2",
+  "run_mode": "formal",
+  "run_id": "formal-pilot-v1",
+  "writer_order_seed": "rhetcomp-writer-order-v1",
+  "source": {
+    "provider": "ACL Anthology",
+    "metadata_url": "https://raw.githubusercontent.com/acl-org/acl-anthology/master/data/xml/2024.acl.xml",
+    "license_identifier": "CC-BY-4.0",
+    "license_url": "https://aclanthology.org/faq/copyright/",
+    "volume": "long",
+    "selection_seed": "rhetcomp-acl-pilot-v1",
+    "expected_count": 20
+  },
+  "target": {
+    "provider": "Xiao-Youth/NC_Physics",
+    "dataset_revision": "b3df89906692d2fe2f9edf328a5857681e3e0136",
+    "dataset_license_identifier": "other",
+    "license_review_url": "https://huggingface.co/datasets/Xiao-Youth/NC_Physics",
+    "trainval_source_url": "https://huggingface.co/datasets/Xiao-Youth/NC_Physics/resolve/b3df89906692d2fe2f9edf328a5857681e3e0136/NC_Physics_trainval.jsonl?download=true",
+    "trainval_expected_count": 11341,
+    "config": "default",
+    "split": "train",
+    "validation_start": 10000,
+    "validation_count": 100,
+    "selection_seed": "rhetcomp-ncphysics-dev-v1",
+    "expected_count": 10,
+    "official_test_access": "forbidden"
+  },
+  "paths": {
+    "acl_metadata_raw": "data/raw/acl/2024.acl.xml",
+    "acl_pdf_root": "data/raw/acl/pdfs",
+    "acl_markdown_root": "data/raw/acl/markdown",
+    "nc_trainval_raw": "data/raw/nc_physics/NC_Physics_trainval.b3df89906692d2fe2f9edf328a5857681e3e0136.jsonl",
+    "nc_validation_snapshot": "data/raw/nc_physics/trainval_validation_100.jsonl",
+    "nc_validation_snapshot_metadata": "data/raw/nc_physics/trainval_validation_100.meta.json",
+    "source_normalized": "data/formal/source/normalized",
+    "target_visible": "data/formal/target/visible",
+    "target_evidence": "data/formal/target/evidence",
+    "target_gold": "data/formal/target/gold",
+    "evidence_packs": "artifacts/formal_pilot/formal-pilot-v1/evidence_packs",
+    "representations": "artifacts/formal_pilot/formal-pilot-v1/representations",
+    "experiences": "artifacts/formal_pilot/formal-pilot-v1/experiences",
+    "generations": "artifacts/formal_pilot/formal-pilot-v1/generations",
+    "costs": "artifacts/formal_pilot/formal-pilot-v1/costs",
+    "evaluations": "artifacts/formal_pilot/formal-pilot-v1/evaluations",
+    "audits": "artifacts/formal_pilot/formal-pilot-v1/audits",
+    "manifests": "data/manifests"
+  }
+}

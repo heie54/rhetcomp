@@ -8,8 +8,10 @@ from typing import Any
 from src.adapters.model import ModelAdapter, ModelRequest
 from src.compilers.config import CompilerSettings
 from src.compilers.experience.verify import VerifiedCandidate
+from src.common.structured_output import load_json_object
 
 _WORD = re.compile(r"\w+", re.UNICODE)
+_ADJUDICATOR_MAX_OUTPUT_TOKENS = 4096
 
 ALL_RELATIONS = (
     "equivalent", "a_subsumes_b", "b_subsumes_a",
@@ -26,6 +28,7 @@ class AdjudicationResult:
     applicability_conflict: bool
     notes: str
     merges: bool
+    provider_metadata: dict[str, Any] | None = None
 
 
 def _tokens(text: str) -> list[str]:
@@ -66,7 +69,14 @@ def _deterministic_adjudication(
 _ADJUDICATOR_SYSTEM = (
     "You adjudicate whether two candidate rhetorical writing strategies are semantically "
     "compatible for consolidation into a single canonical strategy. You never merge without "
-    "an explicit judgment."
+    "an explicit judgment. Return only the requested compact JSON object; do not emit analysis, "
+    "reasoning, or Markdown."
+)
+
+_ADJUDICATOR_FORMAT_REPAIR_SYSTEM = (
+    "Repair the supplied semantic-adjudication result into exactly one valid JSON object without "
+    "changing the judgment. Return only keys relation, compatible_for_canonicalization, "
+    "applicability_conflict, and notes."
 )
 
 
@@ -97,21 +107,61 @@ def _model_adjudication(
     left: VerifiedCandidate,
     right: VerifiedCandidate,
     adapter: ModelAdapter,
-) -> dict[str, Any]:
+    *,
+    formal_mode: bool = False,
+    run_id: str = "unscoped",
+    config_hash: str | None = None,
+    data_manifest_hash: str | None = None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
     response = adapter.generate(
         ModelRequest(
             system_prompt=_ADJUDICATOR_SYSTEM,
             user_prompt=_adjudicator_user(left, right),
-            max_output_tokens=512,
-            temperature=0.0,
-            top_p=1.0,
-            seed=0,
+            max_output_tokens=_ADJUDICATOR_MAX_OUTPUT_TOKENS,
+            temperature=None if formal_mode else 0.0,
+            top_p=None if formal_mode else 1.0,
+            seed=None if formal_mode else 0,
+            thinking_enabled=True if formal_mode else None,
+            reasoning_effort="high" if formal_mode else None,
+            response_format="json_object" if formal_mode else "text",
+            run_id=run_id,
+            role="experience_adjudicator",
+            run_mode="formal" if formal_mode else "mechanics",
+            config_hash=config_hash,
+            data_manifest_hash=data_manifest_hash,
         )
     )
     try:
-        payload = json.loads(response.text)
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"Adjudication output was not valid JSON: {exc}") from exc
+        payload = load_json_object(response.text)
+    except (json.JSONDecodeError, ValueError) as initial_exc:
+        repair = adapter.generate(
+            ModelRequest(
+                system_prompt=_ADJUDICATOR_FORMAT_REPAIR_SYSTEM,
+                user_prompt=(
+                    f"Parser error: {initial_exc}\n"
+                    f"Invalid semantic-adjudication result:\n{response.text}"
+                ),
+                max_output_tokens=_ADJUDICATOR_MAX_OUTPUT_TOKENS,
+                temperature=None if formal_mode else 0.0,
+                top_p=None if formal_mode else 1.0,
+                seed=None if formal_mode else 0,
+                thinking_enabled=True if formal_mode else None,
+                reasoning_effort="high" if formal_mode else None,
+                response_format="json_object" if formal_mode else "text",
+                run_id=run_id,
+                role="experience_adjudicator_format_repair",
+                run_mode="formal" if formal_mode else "mechanics",
+                config_hash=config_hash,
+                data_manifest_hash=data_manifest_hash,
+            )
+        )
+        try:
+            payload = load_json_object(repair.text)
+        except (json.JSONDecodeError, ValueError) as repair_exc:
+            raise ValueError(
+                f"Adjudication output was not valid JSON after one format repair: {repair_exc}"
+            ) from repair_exc
+        response = repair
     required = {
         "relation", "compatible_for_canonicalization", "applicability_conflict", "notes",
     }
@@ -124,7 +174,7 @@ def _model_adjudication(
         "compatible_for_canonicalization": bool(payload["compatible_for_canonicalization"]),
         "applicability_conflict": bool(payload["applicability_conflict"]),
         "notes": str(payload["notes"]),
-    }
+    }, dict(response.metadata)
 
 
 def adjudicate_pair(
@@ -134,22 +184,41 @@ def adjudicate_pair(
     index_b: int,
     settings: CompilerSettings,
     adapter: ModelAdapter | None = None,
+    *,
+    formal_mode: bool = False,
+    run_id: str = "unscoped",
+    config_hash: str | None = None,
+    data_manifest_hash: str | None = None,
 ) -> AdjudicationResult:
     """Semantic equivalence adjudication (spec §8.5)."""
+    if formal_mode and adapter is None:
+        raise ValueError("Formal adjudication requires a real model adapter")
+    provider_metadata = None
     if adapter is None:
         payload = _deterministic_adjudication(left, right)
     else:
-        payload = _model_adjudication(left, right, adapter)
+        payload, provider_metadata = _model_adjudication(
+            left,
+            right,
+            adapter,
+            formal_mode=formal_mode,
+            run_id=run_id,
+            config_hash=config_hash,
+            data_manifest_hash=data_manifest_hash,
+        )
+    relation_compatible = payload["relation"] in settings.compatible_relations
+    compatible = bool(payload["compatible_for_canonicalization"]) and relation_compatible
     conflict_blocks = (
         payload["applicability_conflict"] and settings.require_nonconflicting_applicable_when
     )
-    merges = payload["compatible_for_canonicalization"] and not conflict_blocks
+    merges = compatible and not conflict_blocks
     return AdjudicationResult(
         index_a=index_a,
         index_b=index_b,
         relation=payload["relation"],
-        compatible_for_canonicalization=payload["compatible_for_canonicalization"],
+        compatible_for_canonicalization=compatible,
         applicability_conflict=payload["applicability_conflict"],
         notes=payload["notes"],
         merges=merges,
+        provider_metadata=provider_metadata,
     )

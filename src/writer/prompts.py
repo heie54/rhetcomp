@@ -16,9 +16,15 @@ _CONDITION_LABELS = {
 def build_system_prompt(settings: WriterSettings) -> str:
     return (
         "You are a scientific writer writing the Introduction section of a research paper. "
-        "Write in clear, formal scientific prose. Follow the Target Evidence Pack faithfully; "
-        "do not invent facts outside it. Cite evidence using "
-        f"{settings.citation_format} citations. "
+        "Write in clear, formal scientific prose. The Target Evidence Pack is the only factual "
+        "source. Writing references may guide rhetoric and organization only; never copy their "
+        "facts, models, benchmarks, conclusions, or citations into the target paper. Do not "
+        "invent facts outside the Target Evidence Pack. Every citation must resolve to an item "
+        "in Target Evidence Pack.reference_metadata. Cite evidence using "
+        f"{settings.citation_format} citations. Citation numbers are the 1-based positions in "
+        "reference_metadata, never source-paper numbering. Use [1], [1, 2], or a compact range "
+        "such as [1-4] only when every expanded index is within reference_metadata. If "
+        "reference_metadata is empty, do not emit any citations. "
         f"Target Introduction length: about {settings.desired_introduction_length} tokens."
     )
 
@@ -36,8 +42,11 @@ def build_condition_text(
     representation_content: str | None,
 ) -> str:
     if condition == "evidence_only":
-        return "Writing reference: none."
-    return f"Writing reference ({_CONDITION_LABELS[condition]}):\n{representation_content}"
+        return "Writing reference: none. Use only the Target Evidence Pack for facts and citations."
+    return (
+        f"Writing reference ({_CONDITION_LABELS[condition]}; rhetorical/organizational guidance "
+        f"only, never a factual or citation source):\n{representation_content}"
+    )
 
 
 def prompt_template_hash(system_prompt: str, task_prompt: str) -> str:

@@ -12,7 +12,7 @@ class WriterSettings:
     config_version: str
     model: str | None
     temperature: float
-    top_p: float
+    top_p: float | None
     max_output_tokens: int
     seed: int | None
     citation_format: str
@@ -27,7 +27,7 @@ def load_writer_settings(writer_config_path: str) -> WriterSettings:
         config_version=config["config_version"],
         model=config.get("model"),
         temperature=float(config["temperature"]),
-        top_p=float(config["top_p"]),
+        top_p=float(config["top_p"]) if config.get("top_p") is not None else None,
         max_output_tokens=int(config["max_output_tokens"]),
         seed=config.get("seed"),
         citation_format=str(config["citation_format"]),
